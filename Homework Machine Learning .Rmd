@@ -1,0 +1,152 @@
+<!-- R Commander Markdown Template -->
+
+###  Question : 
+#### How to predict the quality of weight lifting exercise using accelerometer record ? 
+
+
+##### data.analysis@numericable.fr         
+
+```{r echo=FALSE,message = FALSE}
+# include this code chunk as-is to set options
+knitr::opts_chunk$set(comment=NA, prompt=TRUE, out.width=750, fig.height=5, fig.width=8)
+library(Rcmdr)
+library(car)
+library(RcmdrMisc)
+library(caret)
+library(ggplot2)
+# multicore :
+library(doMC)
+
+```
+
+
+### The Dataset
+The research question is relevant to the dataset collected on five different people when performing weight lifting exercises.
+>
+<a href="http://groupware.les.inf.puc-rio.br/har" target="_blank">Dataset homepage and closer explanations are here</a>
+
+
+* Please notice that every call for libraries are integrated to the .Rmd header, so they do not appear in the html file.
+
+1) Ensure you have the dataset in your working directory with **getwd()** command, then :
+```{r}
+set.seed(333)
+DF<-read.csv("pml-training.csv")
+```
+2) get rid of variables without variability and too much of NA's :
+```{r}
+nsv <- nearZeroVar(DF,saveMetrics=TRUE)
+s<-c(rownames(subset(nsv,nzv=="FALSE" & zeroVar=="FALSE")))
+DFF<-subset(DF, select=s)
+DF2<-as.data.frame(apply(DFF,2,FUN=function(x) sum(x=="NA"|x=="0")))
+D<-c(rownames(subset(DF2,!DF2=="NA"|DF2=="0")))
+DFF<-subset(DFF, select=D)
+```
+3) get rid of some useless variables, as we do not need to know timestamps and participant ID's :
+
+```{r}
+DFF<-DFF[,-c(1:5)]
+```
+
+4) Once we have preprocessed, the resulting dataframe contains 54 variables implying 53 predictors:
+```{r}
+dim(DFF)
+```
+
+### The outcome variable
+Obviously, every exercise result is classified from good to bad manner. A stillstanding research question from above resumes itself in the five-type outcome of the categorical variable " classe " :
+
+``` {r}
+qplot(classe,colour=classe,data=DFF)
+```
+### The question solving approach
+
+At first sight, there are two possible approaches to solve the problem :
+* A choice between two model based solutions
+* Model stacking in order to improve accuracy 
+
+In any of the cases, the solution will be evaluated on the basis of the :
+
+* Time of the execution, to ensure a good scalability
+* Evaluated accuracy, impacting both ISE and OSE errors.
+
+A split of the training dataset is here : 
+
+```{r}
+inTrain = createDataPartition(DFF$classe, p = 3/4)[[1]]
+training = DFF[ inTrain,]
+testing = DFF[-inTrain,]
+```
+
+#### 1) Two separate model based Approach 
+
+Every computation uses the **doMC** library, setted on 4 cores of my AMD 10. Please notice that **doMC** is not available in Windows environment. 
+
+As the dataset appears to do not suit the purpose of linear modelization, I have chosen two algorithms, both well known for their nonlinear
+performances : Random Forest and gbm. I have setted the cross validation arbitrarily on 5 but, regarding to the number of records in the dataframe,
+any number between 5 and 10 will perform very well.
+
+```{r}
+
+registerDoMC(4)
+
+control <- trainControl(method="cv", number=5 )
+
+system.time(RF1<-train(classe ~.,data = training, method="rf",trControl=control))
+system.time(GBM2<-train(classe ~.,data = training, method="gbm",verbose=F,trControl=control))
+
+```
+
+Here comes the prediction and its evaluated results :
+
+```{r}
+system.time(P1<-predict(RF1,newdata=testing))
+system.time(P2<-predict(GBM2,newdata=testing))
+
+confusionMatrix(testing$classe,P1)
+confusionMatrix(testing$classe,P2)
+```
+
+The predictive performance is very close , only the time of training differs significantly.
+
+#### 1) Model stacking
+
+Simple as that, both previous models ale tied up and verified over the testing split :
+
+```{r}
+MMDF<-data.frame(P1,P2,classe=testing$classe)
+system.time(STACK<-train(classe~., data=MMDF, method="rf",trControl=control))
+COMB2<-predict(STACK,testing)
+confusionMatrix(testing$classe,COMB2)
+```
+Stacking does not make an accuracy miracle, but that observation should be verified with other real 
+datasets as the more robust stacked model can be less prone to acccumulate out of sample errors.
+
+
+### The conclusion
+
+```{r,fig.height=3.5, fig.width=8,echo=FALSE}
+
+res<-c(0.9982,0.9878,0.9986)
+names(res)<-c("RF","GBM","STACKED")
+barplot(res,col=c("red","orange","gold"),ylim=c(0:1.2),main="Model accuracy" )
+print(res)
+
+```
+```{r,fig.height=3.5, fig.width=8,echo=FALSE}
+
+res2<-c(690.070,261.444,16.240)
+names(res2)<-c("RF","GBM","STACKED")
+barplot(res2,col=c("red","orange","gold"),main="Training times in seconds" )
+print(res2)
+
+```
+All of the tested model have a pretty high predictive accuracy, way over 95 % .
+Obviously, stacking my models does not improve significantly real accuracy over the random forest algorithm itself. 
+Nonetheless, this should also be reconsidered seriously when dealing with more datasets, as the stacked algorithm 
+is more robust by definition and will absorb the OSE error in better way.
+In case of a big data issue, I recommend to use "gbm" boosting solution only,even if it's in sample predictive performance is slightly
+less significant. Easy presumable issue is, that a heavy computation required by "rf" algorithm will not scale very well.
+This choice takes twice and half of the time more than "gbm" on training with these datas. 
+
+
