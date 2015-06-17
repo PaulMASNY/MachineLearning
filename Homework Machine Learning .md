@@ -15,7 +15,7 @@ The research question is relevant to the dataset collected on five different peo
 <a href="http://groupware.les.inf.puc-rio.br/har" target="_blank">Dataset homepage and closer explanations are here</a>
 
 
-* Please notice that every call for libraries are integrated to the .Rmd header, so they do not appear in the html file.
+* Please notice that all of the calls for libraries are integrated to the .Rmd header, so they do not appear in the html file.
 
 1) Ensure you have the dataset in your working directory with **getwd()** command, then :
 
@@ -209,7 +209,7 @@ Balanced Accuracy      0.9964   0.9876   0.9876   0.9910   0.9979
 
 The predictive performance is very close , only the time of training differs significantly.
 
-#### 1) Model stacking
+#### 2) Model stacking
 
 Simple as that, both previous models ale tied up and verified over the testing split :
 
